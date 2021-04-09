@@ -1,0 +1,168 @@
+# all 'aws' commands run outside of instance
+
+## XFS GP2
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-20g-1"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 20 --volume-type gp2
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdb --volume-id vol-075c6311efca5530f
+sgdisk -n 0:0:0 -t 0:8300 -c 0:xfsgp2 /dev/nvme1n1
+mkfs.xfs -L xfsgp2 /dev/nvme1n1p1
+mkdir -pv /mnt/xfs/gp2
+echo 'LABEL=xfsgp2  /mnt/xfs/gp2  xfs rw,relatime 0 0' >> /etc/fstab
+mount /mnt/xfs/gp2
+
+## XFS GP3
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-20g-1"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 20 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdc --volume-id vol-00e33a687500af5ad
+sgdisk -n 0:0:0 -t 0:8300 -c 0:xfsgp3 /dev/nvme2n1
+mkfs.xfs -L xfsgp3 /dev/nvme2n1p1
+mkdir -pv /mnt/xfs/gp3
+echo 'LABEL=xfsgp3  /mnt/xfs/gp3  xfs rw,relatime 0 0' >> /etc/fstab
+mount /mnt/xfs/gp2
+
+## XFS GP2 RAID0
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-10g-1a"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp2
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-10g-1b"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp2
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdd --volume-id vol-0ad80062602c25781
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sde --volume-id vol-06c753867c304ad03
+sgdisk -n 0:0:0 -t 0:fd00 -c 0:xfsgp2ra /dev/nvme3n1
+sgdisk -n 0:0:0 -t 0:fd00 -c 0:xfsgp2rb /dev/nvme4n1
+mdadm -C /dev/md0 -l raid0 -n 2 /dev/nvme3n1p1 /dev/nvme4n1p1
+mkfs.xfs -L xfsgp2r /dev/md0
+mkdir -pv /mnt/xfs/gp2
+echo 'LABEL=xfsgp2r /mnt/xfs/gp2r xfs rw,relatime 0 0' >> /etc/fstab
+mount /mnt/xfs/gp2r
+
+## XFS GP3 RAID0
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-10g-1a"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-10g-1b"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdf --volume-id vol-0fea07da535510811
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdg --volume-id vol-0d8f897e93851451c
+sgdisk -n 0:0:0 -t 0:fd00 -c 0:xfsgp3ra /dev/nvme5n1
+sgdisk -n 0:0:0 -t 0:fd00 -c 0:xfsgp3ra /dev/nvme6n1
+mdadm -C /dev/md1 -l raid0 -n 2 /dev/nvme5n1p1 /dev/nvme6n1p1
+mkfs.xfs -L xfsgp3r /dev/md1
+mkdir -pv /mnt/xfs/gp3r
+echo 'LABEL=xfsgp3r /mnt/xfs/gp3r xfs rw,relatime 0 0' >> /etc/fstab
+mount /mnt/xfs/gp3r
+
+# ------------------------------------------------------------------------------------------
+
+mkdir -pv /mnt/zfs
+modprobe zfs
+
+## ZFS GP2
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-20g-2"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 20 --volume-type gp2
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdh --volume-id vol-0eeff3621a144b9ef
+zpool create -o ashift=12 -m /zfs/zfsgp2 zfsgp2 /dev/nvme7n1
+zfs create -o atime=on -o relatime=on -o compress=off zfsgp2/zfsgp2
+
+## ZFS GP3
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-20g-2"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 20 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdi --volume-id vol-02326e849ac69100c
+zpool create -o ashift=12 -m /zfs/zfsgp3 zfsgp3 /dev/nvme8n1
+zfs create -o atime=on -o relatime=on -o compress=off zfsgp3/zfsgp3
+
+## ZFS GP2 RAID0
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-10g-2a"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp2
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-10g-2b"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp2
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdj --volume-id vol-04c3388cf76665588
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdk --volume-id vol-0eaf8dc6b0f406c39
+zpool create -o ashift=12 -m /zfs/zfsgp2r zfsgp2r /dev/nvme9n1 /dev/nvme10n1
+zfs create -o atime=on -o relatime=on -o compress=off zfsgp2r/zfsgp2r
+
+## ZFS GP3 RAID0
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-10g-2a"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-10g-2b"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdl --volume-id vol-08e8ce116595d78bd
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdm --volume-id vol-0ba5850ce714777fa
+zpool create -o ashift=12 -m /zfs/zfsgp3r zfsgp3r /dev/nvme11n1 /dev/nvme12n1
+zfs create -o atime=on -o relatime=on -o compress=off zfsgp3r/zfsgp3r
+
+## ZFS GP2 compression=lz4
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-20g-3"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 20 --volume-type gp2
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdn --volume-id vol-07c100b1c01ade99b
+zpool create -o ashift=12 -m /zfs/zfsgp2c zfsgp2c /dev/nvme13n1
+zfs create -o atime=on -o relatime=on -o compress=lz4 zfsgp2c/zfsgp2c
+
+## ZFS GP3 compression=lz4
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-20g-3"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 20 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdo --volume-id vol-0f46e3aefe693e318
+zpool create -o ashift=12 -m /zfs/zfsgp3c zfsgp3c /dev/nvme14n1
+zfs create -o atime=on -o relatime=on -o compress=lz4 zfsgp3c/zfsgp3c
+
+## ZFS GP2 RAID0 compression=lz4
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-10g-3a"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp2
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp2-10g-3b"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp2
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdp --volume-id vol-0b8261fcf14933ced
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdq --volume-id vol-01adcb648468ecb9f
+zpool create -o ashift=12 -m /zfs/zfsgp2rc zfsgp2rc /dev/nvme15n1 /dev/nvme16n1
+zfs create -o atime=on -o relatime=on -o compress=lz4 zfsgp2rc/zfsgp2rc
+
+## ZFS GP3 RAID0 compression=lz4
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-10g-3a"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 create-volume --tag-specifications 'ResourceType=volume,Tags=[{Key="Name",Value="test-gp3-10g-3b"},{Key="Project",Value="ebs benchmarking"}]' --availability-zone "us-east-2b" --no-multi-attach-enabled --encrypted --kms-key-id "arn:aws:kms:us-east-2:REDACTED:key/REDACTED" --size 10 --volume-type gp3 --throughput 125 --iops 3000
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sdr --volume-id vol-083627acf1f791d38
+# aws ec2 attach-volume --instance-id i-02a19fcdb73bf5d94 --device /dev/sds --volume-id vol-0702f9bfc6a60f14f
+zpool create -o ashift=12 -m /zfs/zfsgp3rc zfsgp3rc /dev/nvme17n1 /dev/nvme18n1
+zfs create -o atime=on -o relatime=on -o compress=lz4 zfsgp3rc/zfsgp3rc
+
+# create symlinks in /mnt/zfs to zvols
+cd /mnt/zfs
+find /zfs/zfs -mindepth 2 -maxdepth 2 -type d -exec ln -sv '{}' \;
+
+------------------------------------------------------------------------------------------
+
+# prepare
+dnf install -y python38 python38-setuptools python38-wheel fio git tmux
+tmux
+cd /opt
+python3 -m venv fio-venv
+export VIRTUAL_ENV="/opt/fio-venv"
+export PATH="$VIRTUAL_ENV/bin:$PATH"
+unset PYTHONHOME
+python3 -m pip install --upgrade pip wheel setuptools
+git clone https://github.com/louwrentius/fio-plot.git
+cd fio-plot
+find . -name .DS_Store -or -name __pycache__ -or -name .pytest_cache -exec rm -Rvf '{}' +
+pip install -r <(cat benchmark_script/requirements.txt; cat fio_plot/requirements.txt)
+cd benchmark_script
+
+## rerun these if starting again:
+# export VIRTUAL_ENV="/opt/fio-venv"
+# export PATH="$VIRTUAL_ENV/bin:$PATH"
+# unset PYTHONHOME
+# cd /opt/fio-plot/benchmark_script
+
+for i in xfs/gp2 xfs/gp2r xfs/gp3 xfs/gp3r zfs/zfsgp2 zfs/zfsgp2c zfs/zfsgp2r zfs/zfsgp2rc zfs/zfsgp3 zfs/zfsgp3c zfs/zfsgp3r zfs/zfsgp3rc; do mkdir -pv "/root/benchmark/${i}"; nice -n-10 -- ./bench_fio --extra-opts refill_buffers=1 --mode randread randwrite --size 100MiB --type directory --target "/mnt/${i}" --output "/root/benchmark/${i}"; done
+tar cvzf /root/benchmark.tgz /root/benchmark
+
+# moved stuff around to a more sensible structure after completion as these will show up in the graphs
+#
+# data exists for 'randread' and 'randwrite'
+#
+# .
+# ├── xfs
+# │   ├── raid0
+# │   │   ├── gp2
+# │   │   └── gp3
+# │   └── single
+# │       ├── gp2
+# │       └── gp3
+# └── zfs
+#     ├── raid0
+#     │   ├── compressed
+#     │   │   ├── gp2
+#     │   │   └── gp3
+#     │   ├── gp2
+#     │   └── gp3
+#     └── single
+#         ├── compressed
+#         │   ├── gp2
+#         │   └── gp3
+#         ├── gp2
+#         └── gp3
+
+# see graphs.sh for graph generation from data
+
+# data (zfs and xfs) directories compressed with:
+#  find zfs xfs -type f -print0 | sort -zV | tar -cvf data.tar --null -T -
+#  zstd -z --ultra -22 -T4 --long -M4096 -v data.tar
